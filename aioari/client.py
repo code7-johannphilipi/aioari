@@ -9,11 +9,14 @@ import json
 import urllib
 import aiohttp
 import aioswagger11.client
+import logging
+
+from datetime import datetime
 
 from aioari.model import Repository
 from aioari.model import Channel, Bridge, Playback, LiveRecording, StoredRecording, Endpoint, DeviceState, Sound
 
-import logging
+
 log = logging.getLogger(__name__)
 
 
@@ -99,6 +102,7 @@ class Client(object):
         # TypeChecker false positive on iter(callable, sentinel) -> iterator
         # Fixed in plugin v3.0.1
         # noinspection PyTypeChecker
+        
         while True:
             msg = await ws.receive()
             if msg is None:
@@ -112,27 +116,34 @@ class Client(object):
             if not isinstance(msg_json, dict) or 'type' not in msg_json:
                 log.error("Invalid event: %s" % msg)
                 continue
-            await self.process_ws(msg_json)
+            
+            initial_request = datetime.now()
+            log.debug(f"$$AIOARI -> Mensagem: Recebida em {initial_request} mensagem: {msg_json}")
+            await self.process_ws(msg_json,initial_request)
 
-    async def process_ws(self, msg):
-        """Process one incoming websocket message"""
-
+    async def process_ws(self, msg,initial_request):
+        """Process one incoming websocket message"""        
+        log.debug(f"$$AIOARI -> Iniciando para {initial_request} mensagem: {msg}")
         listeners = list(self.event_listeners.get(msg['type'], [])) \
                     + list(self.event_listeners.get('*', []))
         for listener in listeners:
             # noinspection PyBroadException
             try:
                 callback, args, kwargs = listener
-                log.debug("cb_type=%s" % type(callback))
+                log.debug(f"$$AIOARI -> {initial_request} ")
                 args = args or ()
                 kwargs = kwargs or {}
                 cb = callback(msg, *args, **kwargs)
                 # The callback may or may not be an async function
                 if hasattr(cb,'__await__'):
+                    log.debug(f"$$AIOARI -> Callback possui await para  {initial_request} mensagem: {msg}")
                     await cb
+                    log.debug(f"$$AIOARI -> Final Await para o callback  {initial_request} mensagem: {msg}")
 
             except Exception as e:
+                log.debug(f"$$AIOARI -> Exception foi {e}")
                 self.exception_handler(e)
+        log.debug(f"$$AIOARI -> Finalizado para {initial_request} mensagem: {msg}")
 
     async def run(self, apps, *, _test_msgs=[]):
         """Connect to the WebSocket and begin processing messages.
@@ -171,7 +182,7 @@ class Client(object):
             if event_cb == cb[0]:
                 listeners.remove(cb)
         callback_obj = (event_cb, args, kwargs)
-        log.debug("event_cb=%s" % event_cb)
+        log.debug(f"event_cb={event_cb} - args {args} kwargs {kwargs} - Type {event_type}")
         listeners.append(callback_obj)
         client = self
 
@@ -336,4 +347,3 @@ class Client(object):
         """
         return self.on_object_event(event_type, fn, Sound, 'Sound',
                                     *args, **kwargs)
-

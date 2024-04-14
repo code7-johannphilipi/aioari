@@ -18,9 +18,8 @@ Stasis events relating to that object.
 """
 
 import re
-import logging
 import json
-import inspect
+import logging
 
 from aiohttp.web_exceptions import HTTPNoContent
 
@@ -199,7 +198,7 @@ class BaseObject(object):
                 if self.id == objects.id:
                     res = fn(objects, event, *args, **kwargs)
             # The callback may or may not be an async function
-            if inspect.iscoroutine(res):
+            if hasattr(res,'__await__'):
                 await res
             return res
 
@@ -393,7 +392,7 @@ async def promote(client, resp, operation_json):
         return factory(client, resp_json)
     if resp.status == HTTPNoContent.status_code:
         return None
-    log.info("No mapping for %s; returning JSON" % response_class)
+    log.debug("No mapping for %s; returning JSON" % response_class)
     return json.loads(res)
 
 
